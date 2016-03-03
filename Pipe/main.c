@@ -68,10 +68,17 @@ void print(pipe_t * const p)
 
 void log(pipe_t * const from, pipe_t * const to, uint32_t elem)
 {
-	printf("%s -> %d -> %s\n", from->name, elem, to->name);
+	if (from->state == NULL && to->state == NULL)
+		printf("%s -> %d -> %s\n", from->name, elem, to->name);
+	else if (from->state != NULL && to->state != NULL)
+		printf("%s(%d) -> %d -> %s(%d)\n", from->name, *((uint32_t*)from->state), elem, to->name, *((uint32_t*)to->state));
+	else if (from->state != NULL)
+		printf("%s(%d) -> %d -> %s\n", from->name, *((uint32_t*)from->state), elem, to->name);
+	else
+		printf("%s -> %d -> %s(%d)\n", from->name, elem, to->name, *((uint32_t*)to->state));
 }
 
-int main(int argc, char * argv[])
+int main(void)
 {
 	uint32_t counter = 0;
 
