@@ -14,7 +14,7 @@ typedef struct pipe_tt
 {
 	ringbuffer_t * input;
 	void * state;
-  struct pipe_tt *connection[PIPE_NUMBER_OF_CONNECTIONS];
+  struct pipe_tt ** connection;
 	uint32_t connection_count;
   uint32_t connection_max;
 	char * name;
@@ -34,16 +34,18 @@ typedef struct pipe_tt
 Macro for the creation of a pipe.
 Automates the creation of a ring buffer and the pipe.
 arg_name is the variable name and string name of the pipe.
-arg_state is the given state, which can be used in the function.
 arg_size is the ring buffer size in bytes.
+arg_conn_count is the number of outgoing connections.
+arg_state is the given state, which can be used in the function.
 arg_log is the log function, called when an element is sent.
 */
-#define Pipe_Create(arg_name, arg_state, arg_size, arg_log)                   \
-static uint32_t Concat(buffer, __LINE__)[arg_size];                           \
-ringbuffer_t arg_name ## _rb;                                                 \
-RingBuffer_InitFromArray(&arg_name ## _rb, Concat(buffer, __LINE__), SizeOfArray(Concat(buffer, __LINE__))); \
-pipe_t arg_name;                                                              \
-Pipe_Init(&arg_name, &arg_name ## _rb, arg_state, #arg_name, arg_log)
+#define Pipe_Create(arg_name, arg_size, arg_conn_count, arg_state, arg_log)                        \
+static uint32_t Concat(arg_name, Concat(_buffer, __LINE__))[arg_size];                             \
+ringbuffer_t arg_name ## _rb;                                                                      \
+RingBuffer_InitFromArray(&arg_name ## _rb, Concat(arg_name, Concat(_buffer, __LINE__)), arg_size); \
+pipe_t arg_name;                                                                                   \
+static pipe_t *Concat(arg_name, Concat(_connection_buffer, __LINE__))[arg_conn_count];             \
+Pipe_Init(&arg_name, &arg_name ## _rb, Concat(arg_name, Concat(_connection_buffer, __LINE__)), arg_conn_count, arg_state, #arg_name, arg_log)
 
 /*
 Initializes a pipe.
@@ -54,6 +56,8 @@ A Name and a logging function are usefull to track the dataflow.
 static inline void Pipe_Init(
 	pipe_t * const pipe,
 	ringbuffer_t * const input,
+  pipe_t ** pipe_connections,
+  uint32_t connection_max,
 	void * state,
 	char * const name,
   void(*log_function)(struct pipe_tt * source, struct pipe_tt * target, uint32_t element)
@@ -61,12 +65,13 @@ static inline void Pipe_Init(
 {
   pipe->input = input;
   pipe->state = state;
+  pipe->connection = pipe_connections;
 
-  for (uint8_t i = 0; i < PIPE_NUMBER_OF_CONNECTIONS; i++)
+  for (uint8_t i = 0; i < connection_max; i++)
     pipe->connection[i] = NULL;
 
   pipe->connection_count = 0;
-  pipe->connection_max = PIPE_NUMBER_OF_CONNECTIONS;
+  pipe->connection_max = connection_max;
   pipe->name = name;
   pipe->log_function = log_function;
 }

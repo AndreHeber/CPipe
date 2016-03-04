@@ -95,12 +95,12 @@ int main(void)
 	uint32_t counter = 0;
 
 	/* Create pipes and connect them */
-	Pipe_Create(increment_pipe, NULL, 4, log);
-	Pipe_Create(square_pipe, NULL, 4, log);
-	Pipe_Create(integrate_pipe, &counter, 4, log);
-	Pipe_Create(sum_pipe, NULL, 8, log);
-	Pipe_Create(average_pipe, NULL, 8, log);
-	Pipe_Create(print_pipe, NULL, 4, log);
+	Pipe_Create(increment_pipe, 4, 1, NULL, log);
+	Pipe_Create(square_pipe, 4, 1, NULL, log);
+	Pipe_Create(integrate_pipe, 8, 2, &counter, log);
+	Pipe_Create(sum_pipe, 8, 1, NULL, log);
+	Pipe_Create(average_pipe, 8, 1, NULL, log);
+	Pipe_Create(print_pipe, 4, 1, NULL, log);
 
 	Pipe_Connect(&increment_pipe, &integrate_pipe);
 	Pipe_Connect(&square_pipe, &integrate_pipe);
