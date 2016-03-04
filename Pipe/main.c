@@ -3,6 +3,7 @@
 #include "ringbuffer.h"
 #include "pipe.h"
 
+/* Integrate every element of the signal. */
 void increment(pipe_t * const p)
 {
 	while (Pipe_isFilled(p))
@@ -13,6 +14,7 @@ void increment(pipe_t * const p)
 	}
 }
 
+/* Square every element of the signal. */
 void square(pipe_t * const p)
 {
 	while (Pipe_isFilled(p))
@@ -23,59 +25,69 @@ void square(pipe_t * const p)
 	}
 }
 
-void integrate(pipe_t * const p)
+/* Integrate over every element of the signal. */
+void integrate(pipe_t * const pipe)
 {
-	uint32_t * state = p->state;
+  uint32_t state = *((uint32_t*)pipe->state);
 
-	while (Pipe_isFilled(p))
+  while (Pipe_isFilled(pipe))
 	{
-		uint32_t item = Pipe_Read(p);
-		*state = *state + item;
-		Pipe_Write(p, *state);
+    uint32_t item = Pipe_Read(pipe);
+		state = state + item;
+    Pipe_Write(pipe, state);
 	}
+
+  *((uint32_t*)pipe->state) = state;
 }
 
-void sum(pipe_t * const p)
+/* Build the sum of all elements of the signal. */
+void sum(pipe_t * const pipe)
 {
 	uint32_t sum = 0;
 
-	while (Pipe_isFilled(p))
-		sum += Pipe_Read(p);
-	Pipe_Write(p, sum);
+  while (Pipe_isFilled(pipe))
+    sum += Pipe_Read(pipe);
+  Pipe_Write(pipe, sum);
 }
 
-void average(pipe_t * const p)
+/* Build the average of all elements of the signal. */
+void average(pipe_t * const pipe)
 {
 	uint32_t sum = 0;
 	uint32_t element_counter = 0;
 	uint32_t average = 0;
 
-	while (Pipe_isFilled(p))
+  while (Pipe_isFilled(pipe))
 	{
-		sum += Pipe_Read(p);
+    sum += Pipe_Read(pipe);
 		element_counter++;
 	}
 	average = sum / element_counter;
-	Pipe_Write(p, average);
+  Pipe_Write(pipe, average);
 }
 
-void print(pipe_t * const p)
+/* Print the signal. */
+void print(pipe_t * const pipe)
 {
 	printf("\nOutput:\n");
-	while (Pipe_isFilled(p))
-		printf("%d\n", Pipe_Read(p));
+  while (Pipe_isFilled(pipe))
+    printf("%d\n", Pipe_Read(pipe));
 }
 
-void log(pipe_t * const from, pipe_t * const to, uint32_t elem)
+/* Logging function. Set by user. */
+void log(pipe_t * const source, pipe_t * const target, uint32_t element)
 {
-	if (from->state == NULL && to->state == NULL)
-		printf("%s -> %d -> %s\n", from->name, elem, to->name);
-	else if (from->state != NULL && to->state != NULL)
-		printf("%s(%d) -> %d -> %s(%d)\n", from->name, *((uint32_t*)from->state), elem, to->name, *((uint32_t*)to->state));
-	else if (from->state != NULL)
-		printf("%s(%d) -> %d -> %s\n", from->name, *((uint32_t*)from->state), elem, to->name);
+  if (Pipe_isFull(target))
+    printf("Error: Pipe %s is full!\n", target->name);
+
+  if (source->state == NULL && target->state == NULL)
+    printf("%s -> %d -> %s\n", source->name, element, target->name);
+  else if (source->state != NULL && target->state != NULL)
+    printf("%s(%d) -> %d -> %s(%d)\n", source->name, *((uint32_t*)source->state), element, target->name, *((uint32_t*)target->state));
+  else if (source->state != NULL)
+    printf("%s(%d) -> %d -> %s\n", source->name, *((uint32_t*)source->state), element, target->name);
 	else
-		printf("%s -> %d -> %s(%d)\n", from->name, elem, to->name, *((uint32_t*)to->state));
+    printf("%s -> %d -> %s(%d)\n", source->name, element, target->name, *((uint32_t*)target->state));
 }
 
 int main(void)
@@ -85,7 +97,7 @@ int main(void)
 	/* Create pipes and connect them */
 	Pipe_Create(increment_pipe, NULL, 4, log);
 	Pipe_Create(square_pipe, NULL, 4, log);
-	Pipe_Create(integrate_pipe, &counter, 8, log);
+	Pipe_Create(integrate_pipe, &counter, 4, log);
 	Pipe_Create(sum_pipe, NULL, 8, log);
 	Pipe_Create(average_pipe, NULL, 8, log);
 	Pipe_Create(print_pipe, NULL, 4, log);

@@ -7,87 +7,132 @@
 /* microsoft specific */
 #define inline __inline
 
-/* number of counts */
-#define PIPE_OUTPUT_COUNT 4
+/* number of connections */
+#define PIPE_NUMBER_OF_CONNECTIONS 4
 
 typedef struct pipe_tt
 {
 	ringbuffer_t * input;
 	void * state;
-	struct pipe_tt *output[PIPE_OUTPUT_COUNT];
-	uint8_t output_count;
+  struct pipe_tt *connection[PIPE_NUMBER_OF_CONNECTIONS];
+	uint32_t connection_count;
+  uint32_t connection_max;
 	char * name;
-	void(*log)(struct pipe_tt * from, struct pipe_tt * to, uint32_t elem);
+	void(*log_function)(struct pipe_tt * from, struct pipe_tt * to, uint32_t elem);
 } pipe_t;
 
 
-/***********************************/
-/* Functions to contruct pipe mesh */
-/***********************************/
+/***************************************/
+/* Functions to construct pipe system. */
+/***************************************/
 
 #define Concat2(a, b) a ## b
 #define Concat(a, b) Concat2(a, b)
 #define SizeOfArray(arg) ( sizeof(arg) / sizeof(arg[0]) )
 
-#define Pipe_Create(arg_name, arg_state, arg_size, arg_log)                     \
-  static uint32_t Concat(buffer, __LINE__)[arg_size];              \
-  ringbuffer_t arg_name ## _rb; \
-  RingBuffer_InitFromArray(&arg_name ## _rb, Concat(buffer, __LINE__), SizeOfArray(Concat(buffer, __LINE__))); \
-  pipe_t arg_name; \
-  Pipe_Init(&arg_name, &arg_name ## _rb, arg_state, #arg_name, arg_log)
+/*
+Macro for the creation of a pipe.
+Automates the creation of a ring buffer and the pipe.
+arg_name is the variable name and string name of the pipe.
+arg_state is the given state, which can be used in the function.
+arg_size is the ring buffer size in bytes.
+arg_log is the log function, called when an element is sent.
+*/
+#define Pipe_Create(arg_name, arg_state, arg_size, arg_log)                   \
+static uint32_t Concat(buffer, __LINE__)[arg_size];                           \
+ringbuffer_t arg_name ## _rb;                                                 \
+RingBuffer_InitFromArray(&arg_name ## _rb, Concat(buffer, __LINE__), SizeOfArray(Concat(buffer, __LINE__))); \
+pipe_t arg_name;                                                              \
+Pipe_Init(&arg_name, &arg_name ## _rb, arg_state, #arg_name, arg_log)
 
+/*
+Initializes a pipe.
+A Ringbuffer is needed to store elements from other pipes.
+A State (NULL if function has no state) for the function using the pipe.
+A Name and a logging function are usefull to track the dataflow.
+*/
 static inline void Pipe_Init(
-	pipe_t * const p,
-	ringbuffer_t * const arg_input,
-	void * arg_state,
-	char * const arg_name,
-	void(*arg_log)(struct pipe_tt * from, struct pipe_tt * to, uint32_t elem)
+	pipe_t * const pipe,
+	ringbuffer_t * const input,
+	void * state,
+	char * const name,
+  void(*log_function)(struct pipe_tt * source, struct pipe_tt * target, uint32_t element)
 	)
 {
-	p->input = arg_input;
-	p->state = arg_state;
+  pipe->input = input;
+  pipe->state = state;
 
-	for (uint8_t i = 0; i < PIPE_OUTPUT_COUNT; i++)
-		p->output[i] = NULL;
+  for (uint8_t i = 0; i < PIPE_NUMBER_OF_CONNECTIONS; i++)
+    pipe->connection[i] = NULL;
 
-	p->output_count = 0;
-	p->name = arg_name;
-	p->log = arg_log;
+  pipe->connection_count = 0;
+  pipe->connection_max = PIPE_NUMBER_OF_CONNECTIONS;
+  pipe->name = name;
+  pipe->log_function = log_function;
 }
 
-static inline void Pipe_Connect(pipe_t * const a, pipe_t * const b)
+/* Connect two pipes. Pipe a sends elements to pipe b. */
+static inline void Pipe_Connect(pipe_t * const source, pipe_t * const target)
 {
-	a->output[a->output_count] = b;
-	a->output_count++;
+  if (source->connection_count < source->connection_max)
+  {
+    source->connection[source->connection_count] = target;
+    source->connection_count++;
+  }
 }
 
 
-/************************************/
-/* Functions to work with pipe mesh */
-/************************************/
+/*******************************************/
+/* Functions to work with the pipe system. */
+/*******************************************/
 
-static inline void Pipe_Insert(pipe_t * const p, uint32_t elem)
+/*
+Inserts a element into a pipe.
+So the signal can inserted to the pipe system.
+*/
+static inline void Pipe_Insert(pipe_t * const pipe, uint32_t element)
 {
-	RingBuffer_Write(p->input, elem);
+  RingBuffer_Write(pipe->input, element);
 }
 
-static inline uint32_t Pipe_Read(pipe_t * p)
+/*
+Read an element from the pipe.
+Used inside functions of the pipe system.
+*/
+static inline uint32_t Pipe_Read(pipe_t * pipe)
 {
-	return RingBuffer_Read(p->input);
+  return RingBuffer_Read(pipe->input);
 }
 
-static inline void Pipe_Write(pipe_t * p, uint32_t elem)
+/*
+Write an element to connected pipes.
+Used inside functions of the pipe system.
+*/
+static inline void Pipe_Write(pipe_t * pipe, uint32_t element)
 {
-	for (uint8_t i = 0; i < p->output_count; i++)
+  for (uint8_t i = 0; i < pipe->connection_count; i++)
 	{
-		p->log(p, p->output[i], elem);
-		RingBuffer_Write(p->output[i]->input, elem);
+    pipe->log_function(pipe, pipe->connection[i], element);
+    RingBuffer_Write(pipe->connection[i]->input, element);
 	}
 }
 
-static inline uint8_t Pipe_isFilled(pipe_t * p)
+/*
+Check if the pipe contents elements.
+Used inside functions of the pipe system.
+*/
+static inline uint8_t Pipe_isFilled(pipe_t * pipe)
 {
-	return RingBuffer_IsFilled(p->input);
+	return RingBuffer_IsFilled(pipe->input);
+}
+
+/*
+Check if the pipe has no place left for new elements.
+Usefull for the logging.
+*/
+static inline uint8_t Pipe_isFull(const pipe_t * pipe)
+{
+  return RingBuffer_IsFull(pipe->input);
 }
 
 #endif
