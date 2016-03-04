@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 
-#define inline __inline
+#ifdef _MSC_VER
+  #define inline __inline
+#endif
 
 typedef struct {
   uint32_t * reader;

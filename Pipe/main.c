@@ -1,7 +1,14 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <strsafe.h>
+#include <windows.h>
+
 #include "ringbuffer.h"
 #include "pipe.h"
+
+#ifdef _MSC_VER
+  #define inline __inline
+#endif
 
 /* Integrate every element of the signal. */
 void increment(pipe_t * const p)
@@ -90,13 +97,86 @@ void log(pipe_t * const source, pipe_t * const target, uint32_t element)
     printf("%s -> %d -> %s(%d)\n", source->name, element, target->name, *((uint32_t*)target->state));
 }
 
+
+#define BUF_SIZE 255
+
+void DisplayMessage(HANDLE hScreen,
+  char *ThreadName, int Data, int Count)
+{
+
+  TCHAR msgBuf[BUF_SIZE];
+  size_t cchStringSize;
+  DWORD dwChars;
+
+  // Print message using thread-safe functions.
+  StringCchPrintf(msgBuf, BUF_SIZE,
+    TEXT("Executing iteration %02d of %s"
+    " having data = %02d \n"),
+    Count, ThreadName, Data);
+  StringCchLength(msgBuf, BUF_SIZE, &cchStringSize);
+  WriteConsole(hScreen, msgBuf, cchStringSize,
+    &dwChars, NULL);
+}
+
+DWORD WINAPI Thread_no_2(LPVOID lpParam)
+{
+
+  int     Data = 0;
+  int     count = 0;
+  HANDLE  hStdout = NULL;
+
+  // Get Handle To screen.
+  // Else how will we print?
+  if ((hStdout =
+    GetStdHandle(STD_OUTPUT_HANDLE))
+    == INVALID_HANDLE_VALUE)
+    return 1;
+
+  // Cast the parameter to the correct
+  // data type passed by callee i.e main() in our case.
+  Data = *((int*)lpParam);
+
+  for (count = 0; count <= 4; count++)
+  {
+    DisplayMessage(hStdout, "Thread_no_1", Data, count);
+  }
+
+  return 0;
+}
+
+DWORD WINAPI Thread_no_1(LPVOID lpParam)
+{
+
+  int     Data = 0;
+  int     count = 0;
+  HANDLE  hStdout = NULL;
+
+  // Get Handle To screen.
+  // Else how will we print?
+  if ((hStdout =
+    GetStdHandle(STD_OUTPUT_HANDLE))
+    == INVALID_HANDLE_VALUE)
+    return 1;
+
+  // Cast the parameter to the correct
+  // data type passed by callee i.e main() in our case.
+  Data = *((int*)lpParam);
+
+  for (count = 0; count <= 4; count++)
+  {
+    DisplayMessage(hStdout, "Thread_no_2", Data, count);
+  }
+
+  return 0;
+}
+
 int main(void)
 {
 	uint32_t counter = 0;
 
 	/* Create pipes and connect them */
-	Pipe_Create(increment_pipe, 4, 1, NULL, log);
-	Pipe_Create(square_pipe, 4, 1, NULL, log);
+	Pipe_Create(increment_pipe, 4, 1, NULL, NULL);
+  Pipe_Create(square_pipe, 4, 1, NULL, NULL);
 	Pipe_Create(integrate_pipe, 8, 2, &counter, log);
 	Pipe_Create(sum_pipe, 8, 1, NULL, log);
 	Pipe_Create(average_pipe, 8, 1, NULL, log);
@@ -108,6 +188,26 @@ int main(void)
 	Pipe_Connect(&integrate_pipe, &average_pipe);
 	Pipe_Connect(&sum_pipe, &print_pipe);
 	Pipe_Connect(&average_pipe, &print_pipe);
+
+  /* Create Threads */
+  int Data_Of_Thread_1 = 1;
+  int Data_Of_Thread_2 = 2;
+  HANDLE Handle_Of_Thread_1 = 0;
+  HANDLE Handle_Of_Thread_2 = 0;
+
+  Handle_Of_Thread_1 = CreateThread(NULL, 0, Thread_no_1, &Data_Of_Thread_1, 0, NULL);
+  if (Handle_Of_Thread_1 == NULL)
+    ExitProcess(Data_Of_Thread_1);
+
+  Handle_Of_Thread_2 = CreateThread(NULL, 0, Thread_no_2, &Data_Of_Thread_2, 0, NULL);
+  if (Handle_Of_Thread_2 == NULL)
+    ExitProcess(Data_Of_Thread_2);
+
+  HANDLE Array_Of_Thread_Handles[] = { Handle_Of_Thread_1, Handle_Of_Thread_1 };
+  WaitForMultipleObjects(3, Array_Of_Thread_Handles, TRUE, INFINITE);
+
+  CloseHandle(Handle_Of_Thread_1);
+  CloseHandle(Handle_Of_Thread_2);
 
 	/* Generate input */
 	Pipe_Insert(&increment_pipe, 1);
