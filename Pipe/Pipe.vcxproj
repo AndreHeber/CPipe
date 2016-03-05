@@ -114,6 +114,7 @@
     <ClCompile Include="threads.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="connector.h" />
     <ClInclude Include="pipe.h" />
     <ClInclude Include="ringbuffer.h" />
   </ItemGroup>

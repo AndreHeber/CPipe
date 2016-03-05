@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include "ringbuffer.h"
+#include "connector.h"
 #include "pipe.h"
 
 #ifdef _MSC_VER
@@ -13,7 +14,7 @@
 /* Integrate every element of the signal. */
 void increment(pipe_t * const p)
 {
-	while (Pipe_isFilled(p))
+	while (Pipe_IsFilled(p))
 	{
 		uint32_t item = Pipe_Read(p);
 		item++;
@@ -24,7 +25,7 @@ void increment(pipe_t * const p)
 /* Square every element of the signal. */
 void square(pipe_t * const p)
 {
-	while (Pipe_isFilled(p))
+	while (Pipe_IsFilled(p))
 	{
 		uint32_t item = Pipe_Read(p);
 		item = item * item;
@@ -37,7 +38,7 @@ void integrate(pipe_t * const pipe)
 {
 	uint32_t state = *((uint32_t*)pipe->state);
 
-	while (Pipe_isFilled(pipe))
+	while (Pipe_IsFilled(pipe))
 	{
 		uint32_t item = Pipe_Read(pipe);
 		state = state + item;
@@ -52,7 +53,7 @@ void sum(pipe_t * const pipe)
 {
 	uint32_t sum = 0;
 
-	while (Pipe_isFilled(pipe))
+	while (Pipe_IsFilled(pipe))
 		sum += Pipe_Read(pipe);
 	Pipe_Write(pipe, sum);
 }
@@ -64,7 +65,7 @@ void average(pipe_t * const pipe)
 	uint32_t element_counter = 0;
 	uint32_t average = 0;
 
-	while (Pipe_isFilled(pipe))
+	while (Pipe_IsFilled(pipe))
 	{
 		sum += Pipe_Read(pipe);
 		element_counter++;
@@ -77,27 +78,30 @@ void average(pipe_t * const pipe)
 void print(pipe_t * const pipe)
 {
 	printf("\nOutput:\n");
-	while (Pipe_isFilled(pipe))
+	while (Pipe_IsFilled(pipe))
 		printf("%d\n", Pipe_Read(pipe));
 }
 
 /* Logging function. Set by user. */
 void log(pipe_t * const source, pipe_t * const target, uint32_t element)
 {
-	if (Pipe_isFull(target))
-		printf("Error: Pipe %s is full!\n", target->name);
+	//if (Pipe_IsFull(target))
+	//	printf("Error: Pipe %s is full!\n", target->name);
 
-	if (source->state == NULL && target->state == NULL)
-		printf("%s -> %d -> %s\n", source->name, element, target->name);
-	else if (source->state != NULL && target->state != NULL)
-		printf("%s(%d) -> %d -> %s(%d)\n", source->name, *((uint32_t*)source->state), element, target->name, *((uint32_t*)target->state));
-	else if (source->state != NULL)
-		printf("%s(%d) -> %d -> %s\n", source->name, *((uint32_t*)source->state), element, target->name);
-	else
-		printf("%s -> %d -> %s(%d)\n", source->name, element, target->name, *((uint32_t*)target->state));
+	//if (source->state == NULL && target->state == NULL)
+	//	printf("%s -> %d -> %s\n", source->name, element, target->name);
+	//else if (source->state != NULL && target->state != NULL)
+	//	printf("%s(%d) -> %d -> %s(%d)\n", source->name, *((uint32_t*)source->state), element, target->name, *((uint32_t*)target->state));
+	//else if (source->state != NULL)
+	//	printf("%s(%d) -> %d -> %s\n", source->name, *((uint32_t*)source->state), element, target->name);
+	//else
+	//	printf("%s -> %d -> %s(%d)\n", source->name, element, target->name, *((uint32_t*)target->state));
+
+	printf("%s: %d\n", source->name, element);
 }
 
-extern void threads(void);
+extern void threads(uint32_t loops);
+
 int main(int argc, char *argv[])
 {
 	uint32_t counter = 0;
@@ -105,19 +109,22 @@ int main(int argc, char *argv[])
 	if (argc == 1)
 	{
 		/* Create pipes and connect them */
-		Pipe_Create(increment_pipe, 4, 1, NULL, log);
-		Pipe_Create(square_pipe, 4, 1, NULL, log);
-		Pipe_Create(integrate_pipe, 8, 2, &counter, log);
-		Pipe_Create(sum_pipe, 8, 2, NULL, log);
-		Pipe_Create(average_pipe, 8, 2, NULL, log);
-		Pipe_Create(print_pipe, 4, 2, NULL, log);
+		Pipe_Create(increment_pipe, 1, 1, NULL, log);
+		Pipe_Create(square_pipe, 1, 1, NULL, log);
+		Pipe_Create(integrate_pipe, 2, 2, &counter, log);
+		Pipe_Create(sum_pipe, 1, 1, NULL, log);
+		Pipe_Create(average_pipe, 1, 1, NULL, log);
+		Pipe_Create(print_pipe, 2, 1, NULL, log);
 
-		Pipe_Connect(&increment_pipe, &integrate_pipe);
-		Pipe_Connect(&square_pipe, &integrate_pipe);
-		Pipe_Connect(&integrate_pipe, &sum_pipe);
-		Pipe_Connect(&integrate_pipe, &average_pipe);
-		Pipe_Connect(&sum_pipe, &print_pipe);
-		Pipe_Connect(&average_pipe, &print_pipe);
+		Pipe_CreateInputBuffer(increment_pipe, 4);
+		Pipe_CreateInputBuffer(square_pipe, 4);
+
+		Pipe_CreateConnection(increment_pipe, integrate_pipe, 4);
+		Pipe_CreateConnection(square_pipe, integrate_pipe, 4);
+		Pipe_CreateConnection(integrate_pipe, sum_pipe, 8);
+		Pipe_CreateConnection(integrate_pipe, average_pipe, 8);
+		Pipe_CreateConnection(sum_pipe, print_pipe, 4);
+		Pipe_CreateConnection(average_pipe, print_pipe, 4);
 
 		/* Create Input */
 		Pipe_Insert(&increment_pipe, 1);
@@ -140,7 +147,7 @@ int main(int argc, char *argv[])
 	}
 	else
 	{
-		threads();
+		threads(atoi(argv[1]));
 	}
 
 	return 0;

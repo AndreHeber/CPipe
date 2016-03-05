@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "ringbuffer.h"
+#include "connector.h"
 
 /* microsoft specific */
 #ifdef _MSC_VER
@@ -11,11 +12,9 @@
 
 typedef struct pipe_tt
 {
-	ringbuffer_t * input;
+	connector_t * input_connector;
+	connector_t * output_connector;
 	void * state;
-	struct pipe_tt ** connection;
-	uint32_t connection_count;
-	uint32_t connection_max;
 	char * name;
 	void(*log_function)(struct pipe_tt * from, struct pipe_tt * to, uint32_t elem);
 } pipe_t;
@@ -31,7 +30,7 @@ So the signal can inserted to the pipe system.
 */
 static inline void Pipe_Insert(pipe_t * const pipe, uint32_t element)
 {
-	RingBuffer_Write(pipe->input, element);
+	Connector_Insert(pipe->input_connector, 0, element);
 }
 
 /*
@@ -40,7 +39,7 @@ Used inside functions of the pipe system.
 */
 static inline uint32_t Pipe_Read(pipe_t * pipe)
 {
-	return RingBuffer_Read(pipe->input);
+	return Connector_Read(pipe->input_connector);
 }
 
 /*
@@ -49,29 +48,26 @@ Used inside functions of the pipe system.
 */
 static inline void Pipe_Write(pipe_t * pipe, uint32_t element)
 {
-	for (uint8_t i = 0; i < pipe->connection_count; i++)
-	{
-		pipe->log_function(pipe, pipe->connection[i], element);
-		RingBuffer_Write(pipe->connection[i]->input, element);
-	}
+	pipe->log_function(pipe, NULL, element);
+	Connector_Write(pipe->output_connector, element);
 }
 
 /*
 Check if the pipe contents elements.
 Used inside functions of the pipe system.
 */
-static inline uint8_t Pipe_isFilled(pipe_t * pipe)
+static inline uint8_t Pipe_IsFilled(pipe_t * pipe)
 {
-	return RingBuffer_IsFilled(pipe->input);
+	return Connector_IsFilled(pipe->input_connector);
 }
 
 /*
 Check if the pipe has no place left for new elements.
 Usefull for the logging.
 */
-static inline uint8_t Pipe_isFull(const pipe_t * pipe)
+static inline uint8_t Pipe_IsFull(const pipe_t * pipe)
 {
-	return RingBuffer_IsFull(pipe->input);
+	return Connector_IsFull(pipe->input_connector);
 }
 
 /*
@@ -80,7 +76,7 @@ Shall be set by user.
 */
 static inline void Pipe_Log(pipe_t * const source, pipe_t * const target, uint32_t element)
 {
-	if (Pipe_isFull(target))
+	if (Pipe_IsFull(target))
 		printf("Error: Pipe %s is full!\n", target->name);
 
 	if (source->state == NULL && target->state == NULL)
@@ -100,7 +96,6 @@ static inline void Pipe_Log(pipe_t * const source, pipe_t * const target, uint32
 
 #define Concat2(a, b) a ## b
 #define Concat(a, b) Concat2(a, b)
-#define SizeOfArray(arg) ( sizeof(arg) / sizeof(arg[0]) )
 
 /*
 Macro for the creation of a pipe.
@@ -111,13 +106,11 @@ arg_conn_count is the number of outgoing connections.
 arg_state is the given state, which can be used in the function.
 arg_log is the log function, called when an element is sent.
 */
-#define Pipe_Create(arg_name, arg_size, arg_conn_count, arg_state, arg_log)                        \
-static uint32_t Concat(arg_name, Concat(_buffer, __LINE__))[arg_size];                             \
-ringbuffer_t arg_name ## _rb;                                                                      \
-RingBuffer_InitFromArray(&arg_name ## _rb, Concat(arg_name, Concat(_buffer, __LINE__)), arg_size); \
-pipe_t arg_name;                                                                                   \
-static pipe_t *Concat(arg_name, Concat(_connection_buffer, __LINE__))[arg_conn_count];             \
-Pipe_Init(&arg_name, &arg_name ## _rb, Concat(arg_name, Concat(_connection_buffer, __LINE__)), arg_conn_count, arg_state, #arg_name, arg_log)
+#define Pipe_Create(name, input_connection_count, output_connection_count, state, log)               \
+static Connector_Create(Concat(name, Concat(_input_connector, __LINE__)), input_connection_count);   \
+static Connector_Create(Concat(name, Concat(_output_connector, __LINE__)), output_connection_count); \
+pipe_t name;                                                                                         \
+Pipe_Init(&name, &Concat(name, Concat(_input_connector, __LINE__)), &Concat(name, Concat(_output_connector, __LINE__)), state, #name, log)
 
 /*
 Initializes a pipe.
@@ -127,23 +120,16 @@ A Name and a logging function are usefull to track the dataflow.
 */
 static inline void Pipe_Init(
 	pipe_t * const pipe,
-	ringbuffer_t * const input,
-	pipe_t ** pipe_connections,
-	uint32_t connection_max,
+	connector_t * input_connector,
+	connector_t * output_connector,
 	void * state,
 	char * const name,
 	void(*log_function)(struct pipe_tt * source, struct pipe_tt * target, uint32_t element)
 	)
 {
-	pipe->input = input;
+	pipe->input_connector = input_connector;
+	pipe->output_connector = output_connector;
 	pipe->state = state;
-	pipe->connection = pipe_connections;
-
-	for (uint8_t i = 0; i < connection_max; i++)
-		pipe->connection[i] = NULL;
-
-	pipe->connection_count = 0;
-	pipe->connection_max = connection_max;
 	pipe->name = name;
 
 	if (log_function == NULL)
@@ -153,13 +139,23 @@ static inline void Pipe_Init(
 }
 
 /* Connect two pipes. Pipe a sends elements to pipe b. */
-static inline void Pipe_Connect(pipe_t * const source, pipe_t * const target)
+static inline void Pipe_Connect(pipe_t * const source, pipe_t * const target, ringbuffer_t * ring_buffer)
 {
-	if (source->connection_count < source->connection_max)
-	{
-		source->connection[source->connection_count] = target;
-		source->connection_count++;
-	}
+	Connector_Add(source->output_connector, ring_buffer);
+	Connector_Add(target->input_connector, ring_buffer);
 }
+
+#define Pipe_CreateConnection(source, target, size)                     \
+RingBuffer_Create(Concat(connector_ring_buffer, __LINE__), size);       \
+Pipe_Connect(&source, &target, &Concat(connector_ring_buffer, __LINE__))
+
+static inline void Pipe_AddInputBuffer(pipe_t * const pipe, ringbuffer_t * input_buffer)
+{
+	Connector_Add(pipe->input_connector, input_buffer);
+}
+
+#define Pipe_CreateInputBuffer(pipe_name, size)                                \
+RingBuffer_Create(Concat(connector_ring_buffer, __LINE__), size);              \
+Pipe_AddInputBuffer(&pipe_name, &Concat(connector_ring_buffer, __LINE__))
 
 #endif

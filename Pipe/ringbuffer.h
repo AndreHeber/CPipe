@@ -15,10 +15,13 @@ typedef struct {
 } ringbuffer_t;
 
 /* Use Array as RingBuffer */
-static inline void RingBuffer_InitFromArray(ringbuffer_t * const ring_buffer, uint32_t * const array, uint32_t size)
+static inline void RingBuffer_Init(ringbuffer_t * const ring_buffer, uint32_t * const array, uint32_t size)
 {
 	ring_buffer->start = ring_buffer->reader = ring_buffer->writer = &array[0];
 	ring_buffer->end = &array[0] + size - 1;
+
+	for (uint32_t i = 0; i < size; i++)
+		array[i] = 0;
 }
 
 static inline uint32_t * RingBuffer_NextAddress(ringbuffer_t * const ring_buffer, uint32_t * const pointer)
@@ -66,11 +69,19 @@ static inline uint32_t RingBuffer_Read(ringbuffer_t * const ring_buffer)
 	if (!RingBuffer_IsEmpty(ring_buffer))
 	{
 		element = *(ring_buffer->reader);
-		*(ring_buffer->reader) = 5;
+		*(ring_buffer->reader) = 30;
 		ring_buffer->reader = RingBuffer_NextAddress(ring_buffer, ring_buffer->reader);
 	}
 
 	return element;
 }
+
+/*
+Macro for the creation of a ring buffer.
+*/
+#define RingBuffer_Create(name, size)                                  \
+uint32_t Concat(name, Concat(_buffer, __LINE__))[size];                \
+ringbuffer_t name;                                                     \
+RingBuffer_Init(&name, Concat(name, Concat(_buffer, __LINE__)), size)  \
 
 #endif
