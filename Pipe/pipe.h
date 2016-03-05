@@ -6,19 +6,16 @@
 
 /* microsoft specific */
 #ifdef _MSC_VER
-  #define inline __inline
+#define inline __inline
 #endif
-
-/* number of connections */
-#define PIPE_NUMBER_OF_CONNECTIONS 4
 
 typedef struct pipe_tt
 {
 	ringbuffer_t * input;
 	void * state;
-  struct pipe_tt ** connection;
+	struct pipe_tt ** connection;
 	uint32_t connection_count;
-  uint32_t connection_max;
+	uint32_t connection_max;
 	char * name;
 	void(*log_function)(struct pipe_tt * from, struct pipe_tt * to, uint32_t elem);
 } pipe_t;
@@ -34,7 +31,7 @@ So the signal can inserted to the pipe system.
 */
 static inline void Pipe_Insert(pipe_t * const pipe, uint32_t element)
 {
-  RingBuffer_Write(pipe->input, element);
+	RingBuffer_Write(pipe->input, element);
 }
 
 /*
@@ -43,7 +40,7 @@ Used inside functions of the pipe system.
 */
 static inline uint32_t Pipe_Read(pipe_t * pipe)
 {
-  return RingBuffer_Read(pipe->input);
+	return RingBuffer_Read(pipe->input);
 }
 
 /*
@@ -52,10 +49,10 @@ Used inside functions of the pipe system.
 */
 static inline void Pipe_Write(pipe_t * pipe, uint32_t element)
 {
-  for (uint8_t i = 0; i < pipe->connection_count; i++)
+	for (uint8_t i = 0; i < pipe->connection_count; i++)
 	{
-    pipe->log_function(pipe, pipe->connection[i], element);
-    RingBuffer_Write(pipe->connection[i]->input, element);
+		pipe->log_function(pipe, pipe->connection[i], element);
+		RingBuffer_Write(pipe->connection[i]->input, element);
 	}
 }
 
@@ -74,7 +71,7 @@ Usefull for the logging.
 */
 static inline uint8_t Pipe_isFull(const pipe_t * pipe)
 {
-  return RingBuffer_IsFull(pipe->input);
+	return RingBuffer_IsFull(pipe->input);
 }
 
 /*
@@ -83,17 +80,17 @@ Shall be set by user.
 */
 static inline void Pipe_Log(pipe_t * const source, pipe_t * const target, uint32_t element)
 {
-  if (Pipe_isFull(target))
-    printf("Error: Pipe %s is full!\n", target->name);
+	if (Pipe_isFull(target))
+		printf("Error: Pipe %s is full!\n", target->name);
 
-  if (source->state == NULL && target->state == NULL)
-    printf("%s -> %d -> %s\n", source->name, element, target->name);
-  else if (source->state != NULL && target->state != NULL)
-    printf("%s(%d) -> %d -> %s(%d)\n", source->name, *((uint32_t*)source->state), element, target->name, *((uint32_t*)target->state));
-  else if (source->state != NULL)
-    printf("%s(%d) -> %d -> %s\n", source->name, *((uint32_t*)source->state), element, target->name);
-  else
-    printf("%s -> %d -> %s(%d)\n", source->name, element, target->name, *((uint32_t*)target->state));
+	if (source->state == NULL && target->state == NULL)
+		printf("%s -> %d -> %s\n", source->name, element, target->name);
+	else if (source->state != NULL && target->state != NULL)
+		printf("%s(%d) -> %d -> %s(%d)\n", source->name, *((uint32_t*)source->state), element, target->name, *((uint32_t*)target->state));
+	else if (source->state != NULL)
+		printf("%s(%d) -> %d -> %s\n", source->name, *((uint32_t*)source->state), element, target->name);
+	else
+		printf("%s -> %d -> %s(%d)\n", source->name, element, target->name, *((uint32_t*)target->state));
 }
 
 
@@ -129,40 +126,40 @@ A State (NULL if function has no state) for the function using the pipe.
 A Name and a logging function are usefull to track the dataflow.
 */
 static inline void Pipe_Init(
-  pipe_t * const pipe,
-  ringbuffer_t * const input,
-  pipe_t ** pipe_connections,
-  uint32_t connection_max,
-  void * state,
-  char * const name,
-  void(*log_function)(struct pipe_tt * source, struct pipe_tt * target, uint32_t element)
-  )
+	pipe_t * const pipe,
+	ringbuffer_t * const input,
+	pipe_t ** pipe_connections,
+	uint32_t connection_max,
+	void * state,
+	char * const name,
+	void(*log_function)(struct pipe_tt * source, struct pipe_tt * target, uint32_t element)
+	)
 {
-  pipe->input = input;
-  pipe->state = state;
-  pipe->connection = pipe_connections;
+	pipe->input = input;
+	pipe->state = state;
+	pipe->connection = pipe_connections;
 
-  for (uint8_t i = 0; i < connection_max; i++)
-    pipe->connection[i] = NULL;
+	for (uint8_t i = 0; i < connection_max; i++)
+		pipe->connection[i] = NULL;
 
-  pipe->connection_count = 0;
-  pipe->connection_max = connection_max;
-  pipe->name = name;
+	pipe->connection_count = 0;
+	pipe->connection_max = connection_max;
+	pipe->name = name;
 
-  if (log_function == NULL)
-    pipe->log_function = Pipe_Log;
-  else
-    pipe->log_function = log_function;
+	if (log_function == NULL)
+		pipe->log_function = Pipe_Log;
+	else
+		pipe->log_function = log_function;
 }
 
 /* Connect two pipes. Pipe a sends elements to pipe b. */
 static inline void Pipe_Connect(pipe_t * const source, pipe_t * const target)
 {
-  if (source->connection_count < source->connection_max)
-  {
-    source->connection[source->connection_count] = target;
-    source->connection_count++;
-  }
+	if (source->connection_count < source->connection_max)
+	{
+		source->connection[source->connection_count] = target;
+		source->connection_count++;
+	}
 }
 
 #endif
