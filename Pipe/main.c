@@ -5,88 +5,88 @@
 
 #include "ringbuffer.h"
 #include "connector.h"
-#include "pipe.h"
+#include "hub.h"
 
 #ifdef _MSC_VER
 #define inline __inline
 #endif
 
 /* Integrate every element of the signal. */
-void increment(pipe_t * const p)
+void increment(hub_t * const p)
 {
-	while (Pipe_IsFilled(p))
+	while (Hub_IsFilled(p))
 	{
-		uint32_t item = Pipe_Read(p);
+		uint32_t item = Hub_Read(p);
 		item++;
-		Pipe_Write(p, item);
+		Hub_Write(p, item);
 	}
 }
 
 /* Square every element of the signal. */
-void square(pipe_t * const p)
+void square(hub_t * const p)
 {
-	while (Pipe_IsFilled(p))
+	while (Hub_IsFilled(p))
 	{
-		uint32_t item = Pipe_Read(p);
+		uint32_t item = Hub_Read(p);
 		item = item * item;
-		Pipe_Write(p, item);
+		Hub_Write(p, item);
 	}
 }
 
 /* Integrate over every element of the signal. */
-void integrate(pipe_t * const pipe)
+void integrate(hub_t * const hub)
 {
-	uint32_t state = *((uint32_t*)pipe->state);
+	uint32_t state = *((uint32_t*)hub->state);
 
-	while (Pipe_IsFilled(pipe))
+	while (Hub_IsFilled(hub))
 	{
-		uint32_t item = Pipe_Read(pipe);
+		uint32_t item = Hub_Read(hub);
 		state = state + item;
-		Pipe_Write(pipe, state);
+		Hub_Write(hub, state);
 	}
 
-	*((uint32_t*)pipe->state) = state;
+	*((uint32_t*)hub->state) = state;
 }
 
 /* Build the sum of all elements of the signal. */
-void sum(pipe_t * const pipe)
+void sum(hub_t * const hub)
 {
 	uint32_t sum = 0;
 
-	while (Pipe_IsFilled(pipe))
-		sum += Pipe_Read(pipe);
-	Pipe_Write(pipe, sum);
+	while (Hub_IsFilled(hub))
+		sum += Hub_Read(hub);
+	Hub_Write(hub, sum);
 }
 
 /* Build the average of all elements of the signal. */
-void average(pipe_t * const pipe)
+void average(hub_t * const hub)
 {
 	uint32_t sum = 0;
 	uint32_t element_counter = 0;
 	uint32_t average = 0;
 
-	while (Pipe_IsFilled(pipe))
+	while (Hub_IsFilled(hub))
 	{
-		sum += Pipe_Read(pipe);
+		sum += Hub_Read(hub);
 		element_counter++;
 	}
 	average = sum / element_counter;
-	Pipe_Write(pipe, average);
+	Hub_Write(hub, average);
 }
 
 /* Print the signal. */
-void print(pipe_t * const pipe)
+void print(hub_t * const hub)
 {
 	printf("\nOutput:\n");
-	while (Pipe_IsFilled(pipe))
-		printf("%d\n", Pipe_Read(pipe));
+	while (Hub_IsFilled(hub))
+		printf("%d\n", Hub_Read(hub));
 }
 
 /* Logging function. Set by user. */
-void log(pipe_t * const source, pipe_t * const target, uint32_t element)
-{
-	//if (Pipe_IsFull(target))
-	//	printf("Error: Pipe %s is full!\n", target->name);
+//void log(hub_t * const source, hub_t * const target, uint32_t element)
+//{
+	//if (Hub_IsFull(target))
+	//	printf("Error: Hub %s is full!\n", target->name);
 
 	//if (source->state == NULL && target->state == NULL)
 	//	printf("%s -> %d -> %s\n", source->name, element, target->name);
@@ -97,10 +97,11 @@ void log(pipe_t * const source, pipe_t * const target, uint32_t element)
 	//else
 	//	printf("%s -> %d -> %s(%d)\n", source->name, element, target->name, *((uint32_t*)target->state));
 
-	printf("%s: %d\n", source->name, element);
-}
+	//printf("%s: %d\n", source->name, element);
+//}
 
 extern void threads(uint32_t loops);
+extern void speed(uint32_t items_count);
 
 int main(int argc, char *argv[])
 {
@@ -108,46 +109,50 @@ int main(int argc, char *argv[])
 
 	if (argc == 1)
 	{
-		/* Create pipes and connect them */
-		Pipe_Create(increment_pipe, 1, 1, NULL, log);
-		Pipe_Create(square_pipe, 1, 1, NULL, log);
-		Pipe_Create(integrate_pipe, 2, 2, &counter, log);
-		Pipe_Create(sum_pipe, 1, 1, NULL, log);
-		Pipe_Create(average_pipe, 1, 1, NULL, log);
-		Pipe_Create(print_pipe, 2, 1, NULL, log);
+		/* Create hubs and connect them */
+		Hub_Create(increment_hub, 1, 1, NULL);
+		Hub_Create(square_hub, 1, 1, NULL);
+		Hub_Create(integrate_hub, 2, 2, &counter);
+		Hub_Create(sum_hub, 1, 1, NULL);
+		Hub_Create(average_hub, 1, 1, NULL);
+		Hub_Create(print_hub, 2, 1, NULL);
 
-		Pipe_CreateInputBuffer(increment_pipe, 4);
-		Pipe_CreateInputBuffer(square_pipe, 4);
+		Hub_CreateInputBuffer(increment_hub, 4);
+		Hub_CreateInputBuffer(square_hub, 4);
 
-		Pipe_CreateConnection(increment_pipe, integrate_pipe, 4);
-		Pipe_CreateConnection(square_pipe, integrate_pipe, 4);
-		Pipe_CreateConnection(integrate_pipe, sum_pipe, 8);
-		Pipe_CreateConnection(integrate_pipe, average_pipe, 8);
-		Pipe_CreateConnection(sum_pipe, print_pipe, 4);
-		Pipe_CreateConnection(average_pipe, print_pipe, 4);
+		Hub_CreateConnection(increment_hub, integrate_hub, 4);
+		Hub_CreateConnection(square_hub, integrate_hub, 4);
+		Hub_CreateConnection(integrate_hub, sum_hub, 8);
+		Hub_CreateConnection(integrate_hub, average_hub, 8);
+		Hub_CreateConnection(sum_hub, print_hub, 4);
+		Hub_CreateConnection(average_hub, print_hub, 4);
 
 		/* Create Input */
-		Pipe_Insert(&increment_pipe, 1);
-		Pipe_Insert(&increment_pipe, 3);
-		Pipe_Insert(&increment_pipe, 5);
+		Hub_Insert(&increment_hub, 1);
+		Hub_Insert(&increment_hub, 3);
+		Hub_Insert(&increment_hub, 5);
 
-		Pipe_Insert(&square_pipe, 2);
-		Pipe_Insert(&square_pipe, 4);
-		Pipe_Insert(&square_pipe, 6);
+		Hub_Insert(&square_hub, 2);
+		Hub_Insert(&square_hub, 4);
+		Hub_Insert(&square_hub, 6);
 
 		/* run the functions (each can run in an own thread) */
-		increment(&increment_pipe);
-		square(&square_pipe);
-		integrate(&integrate_pipe);
-		sum(&sum_pipe);
-		average(&average_pipe);
-		print(&print_pipe);
+		increment(&increment_hub);
+		square(&square_hub);
+		integrate(&integrate_hub);
+		sum(&sum_hub);
+		average(&average_hub);
+		print(&print_hub);
 
 		getchar();
 	}
-	else
+	else if (argc == 2)
 	{
 		threads(atoi(argv[1]));
+	}
+	else
+	{
+		speed(atoi(argv[2]));
 	}
 
 	return 0;

@@ -4,64 +4,62 @@
 #include <windows.h>
 
 #include "ringbuffer.h"
-#include "pipe.h"
+#include "hub.h"
 
 #define NUMBER_OF_ELEMENTS 1000
 
 /* Integrate every element of the signal. */
-static void increment(pipe_t * const pipe)
+static void increment(hub_t * const hub)
 {
-	uint8_t check = 1;
-	while (Pipe_IsFilled(pipe))
+	while (Hub_IsFilled(hub))
 	{
-		uint32_t item = Pipe_Read(pipe);
+		uint32_t item = Hub_Read(hub);
 		
 		// do something
 		
-		Pipe_Write(pipe, item);
+		Hub_Write(hub, item);
 	}
 }
 
 DWORD WINAPI Thread1(LPVOID lpParam)
 {
-	pipe_t * pipe = (pipe_t *)lpParam;
+	hub_t * hub = (hub_t *)lpParam;
 
 	/* Generate input */
 	for (int i = 0; i < NUMBER_OF_ELEMENTS; i++)
-		Pipe_Insert(pipe, 42);
-	increment(pipe);
+		Hub_Insert(hub, 42);
+	increment(hub);
 
-	Pipe_Write(pipe, UINT32_MAX);
+	Hub_Write(hub, UINT32_MAX);
 
 	return 0;
 }
 
 DWORD WINAPI Thread2(LPVOID lpParam)
 {
-	pipe_t * pipe = (pipe_t *)lpParam;
+	hub_t * hub = (hub_t *)lpParam;
 
 	/* Generate input */
 	for (int i = 0; i < NUMBER_OF_ELEMENTS; i++)
-		Pipe_Insert(pipe, 23);
-	increment(pipe);
+		Hub_Insert(hub, 23);
+	increment(hub);
 
-	Pipe_Write(pipe, UINT32_MAX);
+	Hub_Write(hub, UINT32_MAX);
 
 	return 0;
 }
 
 DWORD WINAPI Thread3(LPVOID lpParam)
 {
-	pipe_t * pipe = (pipe_t *)lpParam;
+	hub_t * hub = (hub_t *)lpParam;
 	uint32_t item = 0;
-	uint8_t check = 1;
 	uint8_t symbol_counter = 0;
 	
 	while (symbol_counter < 2)
 	{
-		while (Pipe_IsFilled(pipe))
+		while (Hub_IsFilled(hub))
 		{
-			item = Pipe_Read(pipe);
+			item = Hub_Read(hub);
 
 			if (item == UINT32_MAX)
 			{
@@ -72,26 +70,25 @@ DWORD WINAPI Thread3(LPVOID lpParam)
 			if (item != 42 && item != 23)
 				printf("failed\n");
 
-			Pipe_Write(pipe, item);
+			Hub_Write(hub, item);
 		}
 	}
 
-	Pipe_Write(pipe, UINT32_MAX);
+	Hub_Write(hub, UINT32_MAX);
 
 	return 0;
 }
 
 DWORD WINAPI Thread4(LPVOID lpParam)
 {
-	pipe_t * pipe = (pipe_t *)lpParam;
+	hub_t * hub = (hub_t *)lpParam;
 	uint32_t item = 0;
-	uint8_t check = 1;
 	
 	while (item != UINT32_MAX)
 	{
-		while (Pipe_IsFilled(pipe))
+		while (Hub_IsFilled(hub))
 		{
-			item = Pipe_Read(pipe);
+			item = Hub_Read(hub);
 
 			if (item == UINT32_MAX)
 				break;
@@ -99,26 +96,26 @@ DWORD WINAPI Thread4(LPVOID lpParam)
 			if (item != 42 && item != 23)
 				printf("failed\n");
 
-			Pipe_Write(pipe, item);
+			Hub_Write(hub, item);
 		}
 	}
 
-	Pipe_Write(pipe, UINT32_MAX);
+	Hub_Write(hub, UINT32_MAX);
 
 	return 0;
 }
 
 DWORD WINAPI Thread5(LPVOID lpParam)
 {
-	pipe_t * pipe = (pipe_t *)lpParam;
+	hub_t * hub = (hub_t *)lpParam;
 	uint32_t item = 0;
 	uint8_t check = 1;
 
 	while (item != UINT32_MAX)
 	{
-		while (Pipe_IsFilled(pipe))
+		while (Hub_IsFilled(hub))
 		{
-			item = Pipe_Read(pipe);
+			item = Hub_Read(hub);
 			if (item == 0 || item > 102)
 			{
 				check = 0;
@@ -127,25 +124,25 @@ DWORD WINAPI Thread5(LPVOID lpParam)
 			if (item == UINT32_MAX)
 				break;
 
-			Pipe_Write(pipe, item);
+			Hub_Write(hub, item);
 		}
 	}
 
-	Pipe_Write(pipe, UINT32_MAX);
+	Hub_Write(hub, UINT32_MAX);
 
 	return 0;
 }
 
-void Run_Threads(pipe_t * pipe1, pipe_t * pipe2, pipe_t * pipe3, pipe_t * pipe4, pipe_t * pipe5)
+void Run_Threads(hub_t * hub1, hub_t * hub2, hub_t * hub3, hub_t * hub4, hub_t * hub5)
 {
 	/* Create Threads */
 	HANDLE threadHandles[5];
 
-	threadHandles[0] = CreateThread(NULL, 0, Thread1, pipe1, 0, NULL);
-	threadHandles[1] = CreateThread(NULL, 0, Thread2, pipe2, 0, NULL);
-	threadHandles[2] = CreateThread(NULL, 0, Thread3, pipe3, 0, NULL);
-	threadHandles[3] = CreateThread(NULL, 0, Thread4, pipe4, 0, NULL);
-	threadHandles[4] = CreateThread(NULL, 0, Thread5, pipe5, 0, NULL);
+	threadHandles[0] = CreateThread(NULL, 0, Thread1, hub1, 0, NULL);
+	threadHandles[1] = CreateThread(NULL, 0, Thread2, hub2, 0, NULL);
+	threadHandles[2] = CreateThread(NULL, 0, Thread3, hub3, 0, NULL);
+	threadHandles[3] = CreateThread(NULL, 0, Thread4, hub4, 0, NULL);
+	threadHandles[4] = CreateThread(NULL, 0, Thread5, hub5, 0, NULL);
 
 	WaitForMultipleObjects(5, threadHandles, TRUE, INFINITE);
 
@@ -200,33 +197,26 @@ uint8_t ringbuffer_valid_and_equal(ringbuffer_t * rb1, ringbuffer_t * rb2)
 	return 1;
 }
 
-static void log(pipe_t * const source, pipe_t * const target, uint32_t element)
-{
-	/*wchar_t text[64];
-	swprintf_s(text, 64, L"%s: %d\n", source->name, element);
-	OutputDebugStringW(text);*/
-}
-
 void threads(uint32_t loops)
 {
-	/* Create pipes and connect them */
-	Pipe_Create(increment_pipe1, 1, 1, NULL, log);
-	Pipe_Create(increment_pipe2, 1, 1, NULL, log);
-	Pipe_Create(increment_pipe3, 2, 2, NULL, log);
-	Pipe_Create(increment_pipe4, 1, 1, NULL, log);
-	Pipe_Create(increment_pipe5, 1, 1, NULL, log);
-	Pipe_Create(check_pipe1, 1, 1, NULL, log);
-	Pipe_Create(check_pipe2, 1, 1, NULL, log);
+	/* Create hubs and connect them */
+	Hub_Create(increment_hub1, 1, 1, NULL);
+	Hub_Create(increment_hub2, 1, 1, NULL);
+	Hub_Create(increment_hub3, 2, 2, NULL);
+	Hub_Create(increment_hub4, 1, 1, NULL);
+	Hub_Create(increment_hub5, 1, 1, NULL);
+	Hub_Create(check_hub1, 1, 1, NULL);
+	Hub_Create(check_hub2, 1, 1, NULL);
 
-	Pipe_CreateInputBuffer(increment_pipe1, NUMBER_OF_ELEMENTS+2);
-	Pipe_CreateInputBuffer(increment_pipe2, NUMBER_OF_ELEMENTS+2);
+	Hub_CreateInputBuffer(increment_hub1, NUMBER_OF_ELEMENTS+2);
+	Hub_CreateInputBuffer(increment_hub2, NUMBER_OF_ELEMENTS+2);
 
-	Pipe_CreateConnection(increment_pipe1, increment_pipe3, NUMBER_OF_ELEMENTS+2);
-	Pipe_CreateConnection(increment_pipe2, increment_pipe3, NUMBER_OF_ELEMENTS+2);
-	Pipe_CreateConnection(increment_pipe3, increment_pipe4, NUMBER_OF_ELEMENTS * 2 + 2);
-	Pipe_CreateConnection(increment_pipe3, increment_pipe5, NUMBER_OF_ELEMENTS * 2 + 2);
-	Pipe_CreateConnection(increment_pipe4, check_pipe1, NUMBER_OF_ELEMENTS * 2 + 2);
-	Pipe_CreateConnection(increment_pipe5, check_pipe2, NUMBER_OF_ELEMENTS * 2 + 2);
+	Hub_CreateConnection(increment_hub1, increment_hub3, NUMBER_OF_ELEMENTS+2);
+	Hub_CreateConnection(increment_hub2, increment_hub3, NUMBER_OF_ELEMENTS+2);
+	Hub_CreateConnection(increment_hub3, increment_hub4, NUMBER_OF_ELEMENTS * 2 + 2);
+	Hub_CreateConnection(increment_hub3, increment_hub5, NUMBER_OF_ELEMENTS * 2 + 2);
+	Hub_CreateConnection(increment_hub4, check_hub1, NUMBER_OF_ELEMENTS * 2 + 2);
+	Hub_CreateConnection(increment_hub5, check_hub2, NUMBER_OF_ELEMENTS * 2 + 2);
 
 	//HANDLE hFile;
 	//hFile = CreateFile("buffer.txt", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -245,19 +235,19 @@ void threads(uint32_t loops)
 	QueryPerformanceCounter(&StartingTime);
 	
 	uint32_t success_counter = 0;
-	for (int i = 0; i < loops; i++)
+	for (uint32_t i = 0; i < loops; i++)
 	{
-		Run_Threads(&increment_pipe1, &increment_pipe2, &increment_pipe3, &increment_pipe4, &increment_pipe5);
+		Run_Threads(&increment_hub1, &increment_hub2, &increment_hub3, &increment_hub4, &increment_hub5);
 
-		//if (ringbuffer_valid_and_equal(check_pipe1.input_connector->connection[0], check_pipe2.input_connector->connection[0], hFile))
-		if (ringbuffer_valid_and_equal(check_pipe1.input_connector->connection[0], check_pipe2.input_connector->connection[0]))
+		//if (ringbuffer_valid_and_equal(check_hub1.input_connector->connection[0], check_hub2.input_connector->connection[0], hFile))
+		if (ringbuffer_valid_and_equal(check_hub1.input_connector->connection[0], check_hub2.input_connector->connection[0]))
 			success_counter++;
 	}
 	QueryPerformanceCounter(&EndingTime);
 	ElapsedMicroseconds.QuadPart = EndingTime.QuadPart - StartingTime.QuadPart;
 	ElapsedMicroseconds.QuadPart *= 1000000;
 	ElapsedMicroseconds.QuadPart /= Frequency.QuadPart;
-	int seconds = ElapsedMicroseconds.QuadPart / 1000000;
+	int seconds = (int)ElapsedMicroseconds.QuadPart / 1000000;
 
 	int hours = seconds / 3600;
 	int minutes = (seconds - (hours * 3600)) / 60;

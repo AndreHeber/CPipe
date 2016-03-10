@@ -7,6 +7,12 @@
 #define inline __inline
 #endif
 
+/*
+A thread-safe ring buffer, which uses an pre-declared array as buffer.
+But you have to declare a buffer with one more item than you really need.
+For instance, if you need a ring buffer for 10 items, the array must be declared for 11 items.
+*/
+
 typedef struct {
 	uint32_t * reader;
 	uint32_t * writer;
@@ -19,9 +25,6 @@ static inline void RingBuffer_Init(ringbuffer_t * const ring_buffer, uint32_t * 
 {
 	ring_buffer->start = ring_buffer->reader = ring_buffer->writer = &array[0];
 	ring_buffer->end = &array[0] + size - 1;
-
-	for (uint32_t i = 0; i < size; i++)
-		array[i] = 0;
 }
 
 static inline uint32_t * RingBuffer_NextAddress(ringbuffer_t * const ring_buffer, uint32_t * const pointer)
@@ -51,7 +54,6 @@ static inline uint8_t RingBuffer_IsFilled(ringbuffer_t * const ring_buffer)
 	return !RingBuffer_IsEmpty(ring_buffer);
 }
 
-/* Write element into RingBuffer. */
 static inline void RingBuffer_Write(ringbuffer_t * const ring_buffer, uint32_t element)
 {
 	if (!RingBuffer_IsFull(ring_buffer))
@@ -61,7 +63,6 @@ static inline void RingBuffer_Write(ringbuffer_t * const ring_buffer, uint32_t e
 	}
 }
 
-/* Read value from RingBuffer. */
 static inline uint32_t RingBuffer_Read(ringbuffer_t * const ring_buffer)
 {
 	uint32_t element = 0;
@@ -69,19 +70,32 @@ static inline uint32_t RingBuffer_Read(ringbuffer_t * const ring_buffer)
 	if (!RingBuffer_IsEmpty(ring_buffer))
 	{
 		element = *(ring_buffer->reader);
-		*(ring_buffer->reader) = 30;
 		ring_buffer->reader = RingBuffer_NextAddress(ring_buffer, ring_buffer->reader);
 	}
 
 	return element;
 }
 
+
+#define Concat2(a, b) a ## b
+#define Concat(a, b) Concat2(a, b)
+#define UniqueBuffer(name) Concat(name, Concat(_buffer, __LINE__))
+
 /*
 Macro for the creation of a ring buffer.
 */
-#define RingBuffer_Create(name, size)                                  \
-uint32_t Concat(name, Concat(_buffer, __LINE__))[size];                \
-ringbuffer_t name;                                                     \
-RingBuffer_Init(&name, Concat(name, Concat(_buffer, __LINE__)), size)  \
+#define RingBuffer_Create(name, size)             \
+uint32_t UniqueBuffer(name)[size];                \
+ringbuffer_t name;                                \
+RingBuffer_Init(&name, UniqueBuffer(name), size)  \
+
+#define RingBuffer(name, size)                    \
+uint32_t UniqueBuffer(name)[size];                \
+ringbuffer_t name = {                             \
+	.reader = &UniqueBuffer(name)[0],             \
+	.writer = &UniqueBuffer(name)[0],             \
+	.start = &UniqueBuffer(name)[0],              \
+	.end = &UniqueBuffer(name)[0] + sizeof(UniqueBuffer(name)) / sizeof(UniqueBuffer(name)[0]) \
+}
 
 #endif

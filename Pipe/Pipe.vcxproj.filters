@@ -21,15 +21,18 @@
     <ClCompile Include="threads.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="speed.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="pipe.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ringbuffer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="connector.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="hub.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
